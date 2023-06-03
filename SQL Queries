@@ -1,0 +1,88 @@
+Select *
+from Portfolio..[Covid Deaths]
+
+-- Looking at total cases vs total deaths, showing percentage of deaths in given country
+Select Location, date, total_cases, total_deaths,(cast(total_deaths as float)/total_cases) * 100 as DeathPercentage
+    from Portfolio..[Covid Deaths]
+    where continent is not null
+    order by 1, 2
+
+-- Total cases vs Population, showing percentage of population with Covid-19
+Select Location, date, total_cases, population,
+    (cast(total_cases as float) /population) *100 as CovidPercentage
+    from Portfolio..[Covid Deaths]
+    where Location like '%state%'
+    and continent is not null
+    order by 1, 2
+
+-- Showing Countries with Highest Infection Rate relative to Population
+Select Location, population, max(total_cases) as HighestInfectionCount,
+    Max((cast(total_cases as float)/population)) * 100 as PercentPopulationInfected
+    from Portfolio..[Covid Deaths]
+    where continent is not null
+    group by Location, Population
+    order by PercentPopulationInfected desc
+
+-- Looking at Countries with highest death count relative to population
+Select Location, max(total_deaths) as totaldeathcount
+    from Portfolio..[Covid Deaths]
+    where continent is not null
+    group by Location
+    order by totaldeathcount desc
+
+-- Showing total death count by continent
+Select Location, max(total_deaths) as totaldeathcount
+    from Portfolio..[Covid Deaths]
+    where continent is null
+    group by Location
+    order by totaldeathcount desc
+
+-- Global Cases, Deaths, and Percentage of Death
+Select sum(new_cases) as totalcases, sum(new_deaths) as totaldeaths,
+    sum(cast(new_deaths as float))/sum(new_cases) * 100 as DeathPercentage
+    from Portfolio..[Covid Deaths]
+    where continent is not null
+    order by 1,2
+
+-- Total population and the total rolling count of vaccinations per day
+select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations, 
+    sum(vac.new_vaccinations) OVER (PARTITION by dea.location ORDER by dea.location, dea.date) 
+    as rollingcountofvaccinations
+    from Portfolio..[Covid Deaths] dea
+    join Portfolio..[Covid Vaccinations] vac
+    on dea.location = vac.location
+    and dea.date = vac.date
+    where dea.continent is not null
+    order by 2,3
+
+-- Want to use Rolling Count to calculate rolling percentage of vaccination by CTE
+With PopvsVac (Continent, Location, Date, Population, 
+    new_vaccinations, rollingcountofvaccinations)
+    as
+    (
+    select dea.continent, dea.location, dea.date, dea.population,
+    , vac.new_vaccinations,
+    sum(vac.new_vaccinations) OVER (PARTITION by dea.location order by dea.location, dea.date) 
+    as rollingcountofvaccinations
+    from Portfolio..[Covid Deaths] dea
+    join Portfolio..[Covid Vaccinations] vac
+    on dea.location = vac.location
+    and dea.date = vac.date
+    where dea.continent is not null
+    )
+    select *, (cast(rollingcountofvaccinations as float)/population) * 100 as PercentageOfVaccinationOnGivenDay
+    from PopvsVac
+
+-- Creating View to store data for visualizations
+
+Create VIEW PopulationVaccinated as 
+    select dea.continent, dea.location, dea.date, dea.population
+    , vac.new_vaccinations,
+    sum(vac.new_vaccinations) OVER (PARTITION by dea.location order by dea.location, dea.date) 
+    as rollingcountofvaccinations
+    from Portfolio..[Covid Deaths] dea
+    join Portfolio..[Covid Vaccinations] vac
+    on dea.location = vac.location
+    and dea.date = vac.date
+    where dea.continent is not null
+
